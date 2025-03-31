@@ -7,11 +7,6 @@
 ## About Me
 Hey! I'm Alexander, a Computer Science student at Penn State who balances code, compass, and creativity. By day, I solve problems with code, and by summer, I lead backpacking, camping, and hiking trips. I’m passionate about crafting useful, fun, and meaningful projects.
 
-When I'm not coding, you'll find me:
-- Guiding campers through forests 🏞️
-- Teaching fencing footwork and tactics 🤺
-- Sketching out the next side project idea ✍️
-
 ---
 
 ## ⚙️ Tech Stack
