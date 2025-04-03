@@ -31,7 +31,9 @@ Hey! I'm Alexander, a Computer Science student at Penn State who balances code, 
 ## 📈 GitHub Stats
 
 ![Alexander's GitHub Stats](https://github-readme-stats.vercel.app/api?username=AlexanderMcGreevy&show_icons=true&theme=default&hide_title=true)
+
 ![GitHub Streak](https://streak-stats.demolab.com?user=AlexanderMcGreevy&theme=default)
+
 ![Top Languages](https://github-readme-stats.vercel.app/api/top-langs/?username=AlexanderMcGreevy&layout=compact)
 
 
