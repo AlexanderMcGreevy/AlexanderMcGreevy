@@ -18,7 +18,7 @@ Hey! I'm Alexander, a Computer Science student at Penn State who balances code, 
 ![CSS3](https://img.shields.io/badge/CSS3-1572B6?style=for-the-badge&logo=css3&logoColor=white)
 ![Git](https://img.shields.io/badge/Git-F05032?style=for-the-badge&logo=git&logoColor=white)
 
----
+--- 
 
 ## 🪵 Projects I’ve Enjoyed
 - 🐾 **PetAid** — Helping pet owners automate feeding and supply management.
