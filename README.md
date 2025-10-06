@@ -36,7 +36,7 @@
 
 - 🌱 **EcoPrompt** — Chrome extension to track & cut AI token waste  
   *🏆 3rd Place @ HackMIT Infosys Carbon-Conscious AI Track*
-  🧠 **LookSmith** — Accessible 3D modeling app powered by facial tracking, built in Godot
+- 🧠 **LookSmith** — Accessible 3D modeling app powered by facial tracking, built in Godot
 - 🐾 **PetVitals** — iOS app for pet health & vet visit tracking  
 - 🌳 **GoFundTree** — AR app for urban tree planting engagement  
 - 🎬 **RankFlix** — SwiftData-powered movie ranking app using TMDB API  
