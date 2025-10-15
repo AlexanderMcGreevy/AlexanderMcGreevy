@@ -1,6 +1,6 @@
 # 🌲 Alexander McGreevy  
 
-> 🧑‍💻 CS @ Northeastern | 🤺 Fencer | 🏕️ Outdoor Leader | 🚀 Aspiring SWE  
+> 🧑‍💻 CS + SWE @ Northeastern | 🤺 Fencer | 🏕️ Outdoor Leader | 🚀 Aspiring SWE  
 
 ---
 
