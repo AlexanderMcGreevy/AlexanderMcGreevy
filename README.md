@@ -61,10 +61,11 @@
 - 🌱 **EcoPrompt** — Chrome extension to track & cut AI token waste  
   *🏆 3rd Place @ HackMIT Infosys Carbon-Conscious AI Track*
 - 🧠 **LookSmith** — Accessible 3D modeling app powered by facial tracking, built in Godot
+- 💼 **CARDinal** — Digital business card iOS app for sharing contacts/resume easily 
 - 🐾 **PetVitals** — iOS app for pet health & vet visit tracking  
 - 🌳 **GoFundTree** — AR app for urban tree planting engagement  
 - 🎬 **RankFlix** — SwiftData-powered movie ranking app using TMDB API  
-- 🎮 **Tetris Clone** — Recreation of the classic game in Java Swing  
+- 🎮 **Tetris Clone** — Recreation of the classic game in Java Swing
 
 ---
 
