@@ -66,7 +66,7 @@
 - 💼 **CARDinal** — Digital business card iOS app for sharing contacts/resume easily 
 - 🐾 **PetVitals** — iOS app for pet health & vet visit tracking  
 - 🌳 **GoFundTree** — AR app for urban tree planting engagement  
-- 🎬 **RankFlix** — SwiftData-powered movie ranking app using TMDB API  
+- 🪐 **Clast** — Productivity IOS app that performs productivity analysis to enable breaks, enforces focus sessions, and blocks distractions
 - 🎮 **Tetris Clone** — Recreation of the classic game in Java Swing
 
 ---
