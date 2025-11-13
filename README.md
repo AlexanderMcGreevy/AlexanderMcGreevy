@@ -60,7 +60,7 @@
 
 - 🌱 **EcoPrompt** — Chrome extension to track & cut AI token waste  
   *🏆 3rd Place @ HackMIT Infosys Carbon-Conscious AI Track*
-- 🔒 **Obscurafy** — iOS app that detects and blurs or deletes sensitive info in your photo library
+- 🔒 **Obscurafy** — iOS app that detects and blurs or deletes sensitive info in your photo library  
   *🏆 Winner @ HackUMass Data Privacy Track*
 - 🧠 **LookSmith** — Accessible 3D modeling app powered by facial tracking, built in Godot
 - 💼 **CARDinal** — Digital business card iOS app for sharing contacts/resume easily 
