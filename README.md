@@ -65,7 +65,7 @@
 - 🧠 **LookSmith** — Accessible 3D modeling app powered by facial tracking, built in Godot
 - 💼 **CARDinal** — Digital business card iOS app for sharing contacts/resume easily 
 - 🐾 **PetVitals** — iOS app for pet health & vet visit tracking  
-- 🌳 **GoFundTree** — AR app for urban tree planting engagement  
+- 🌳 **GoFundTree** — AR web-app for urban tree planting engagement  
 - 🪐 **Clast** — Productivity IOS app that performs productivity analysis to enable breaks, enforces focus sessions, and blocks distractions
 - 🎮 **Tetris Clone** — Recreation of the classic game in Java Swing
 
