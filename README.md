@@ -7,7 +7,7 @@
 ## 🚀 About Me  
 
 - 🎓 **CS Student** @ Northeastern University — Concentration in Software Engineering  
-- 💻 **6x Hackathon Participant** — HackMIT (🏆 3rd place Infosys Carbon-Conscious AI)
+- 💻 **8x Hackathon Participant(3x winner)** — HackMIT (🏆 3rd place Infosys Carbon-Conscious AI)
 - 🧠 **Academic Interests:** Algorithms, Software Systems, AI/ML, and Sustainable Computing  
 - 🛠️ **Builder at Heart:** Projects in Full-Stack, iOS (SwiftUI), and Chrome Extensions  
 - 🤺 **Fencer & Coach** — Experienced in strategy, leadership, and mentoring  
