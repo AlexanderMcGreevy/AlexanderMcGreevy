@@ -1,0 +1,112 @@
+<h2>Where the profile-views counter goes</h2>
+<p class="subtitle">Same board both times, only the counter changes. Click the one you prefer.</p>
+
+<style>
+  .g{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,var(--c,11px));gap:var(--gap,4px);}
+  .g i{width:var(--c,11px);height:var(--c,11px);display:block;border-radius:50%;}
+  .board{padding:26px 28px;border:6px solid #262626;border-radius:12px;background:#06070b;color:#e8f1ff;font-family:'Courier New',monospace;text-shadow:0 0 6px #ffffff33;overflow-x:auto;min-width:760px}
+  .top{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid #1d2230;padding-bottom:10px;margin-bottom:18px;letter-spacing:.14em;font-size:12px}
+  .top b{font-size:15px;letter-spacing:.2em}
+  .live{color:#4dff91;animation:pl 1.6s ease-in-out infinite}
+  @keyframes pl{50%{opacity:.35}}
+  .sec{font-size:10px;letter-spacing:.22em;margin:0 0 9px;color:#7d8aa5}
+  .kpis{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:20px}
+  .kpi{background:#0b0e16;border:1px solid #1d2230;border-radius:6px;padding:10px 14px;min-width:120px}
+  .kpi .v{font-size:30px;font-weight:700;line-height:1;letter-spacing:.06em}
+  .kpi .l{font-size:9px;letter-spacing:.14em;margin-top:6px;color:#7d8aa5}
+  .kpi .s{font-size:9px;margin-top:3px;letter-spacing:.06em}
+  .pctb{display:flex;align-items:center;gap:10px;font-size:11px;margin-bottom:5px;letter-spacing:.06em}
+  .pctb .nm{width:84px}
+  .pctb .bar{display:flex;gap:2px}
+  .pctb .bar i{width:7px;height:11px;border-radius:2px;display:block}
+  .pulse{animation:pl 1.4s ease-in-out infinite}
+  .leg{display:flex;align-items:center;gap:5px;font-size:10px;color:#7d8aa5;margin-top:12px;letter-spacing:.08em}
+  .leg i{width:11px;height:11px;border-radius:50%;display:inline-block}
+  .foot{margin-top:16px;padding-top:10px;border-top:1px solid #1d2230;font-size:10px;color:#7d8aa5;letter-spacing:.08em;display:flex;justify-content:space-between}
+  /* mock of komarev's own badge, restyled via its color/label options */
+  .badge{display:inline-flex;font:600 12px/1 Verdana,Arial,sans-serif;border-radius:3px;overflow:hidden;margin-top:12px;box-shadow:0 1px 3px #0006}
+  .badge span{padding:6px 10px}
+  .badge .a{background:#262626;color:#e8f1ff}
+  .badge .b{background:#4dff91;color:#06070b}
+  .vis{background:#0b0e16;border:1px solid #4dff9155;border-radius:6px;padding:10px 14px;min-width:150px;box-shadow:0 0 12px #4dff9122 inset}
+  .vis .v{font-size:30px;font-weight:700;line-height:1;letter-spacing:.14em;color:#4dff91;text-shadow:0 0 10px #4dff9188}
+  .vis .v u{text-decoration:none;color:#14301f;text-shadow:none}
+  .vis .l{font-size:9px;letter-spacing:.14em;margin-top:6px;color:#7d8aa5}
+  .cmp{display:flex;gap:10px;font-size:11px;margin:10px 0 24px;color:#9aa}
+  .cmp b{color:#4dff91}
+</style>
+
+<div class="options">
+
+  <div class="option" data-choice="counter-1-live-badge" onclick="toggleSelect(this)">
+    <div class="letter">1</div>
+    <div class="content" style="width:100%">
+      <h3>Live badge under the board</h3>
+      <p>The real counter from that service, restyled to match (dark gray + green). Always accurate. Sits as its own little piece below the board.</p>
+      <div id="b1"></div>
+      <div class="badge"><span class="a">PROFILE VIEWS</span><span class="b">658</span></div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="counter-2-led-readout" onclick="toggleSelect(this)">
+    <div class="letter">2</div>
+    <div class="content" style="width:100%">
+      <h3>LED readout on the board</h3>
+      <p>"VISITORS" drawn as a glowing LED box in the This Year row, with a "as of" date in the footer. Fully matches the look, but updates once a day.</p>
+      <div id="b2"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  function rng(seed){return function(){seed=(seed*1664525+1013904223)%4294967296;return seed/4294967296;};}
+  var pal=['#12161c','#1e7a4a','#37c46b','#ffd24d','#ff5d8f'];
+  function dots(seed){
+    var r=rng(seed), html='';
+    for(var w=0;w<53;w++){
+      var busy=0.35+0.45*Math.sin(w/6)+0.2*r();
+      for(var d=0;d<7;d++){
+        var wk=(d==0||d==6)?0.35:1;
+        var a=r()<busy*wk*0.8?Math.ceil(r()*4):0, b=r()<busy*wk*0.9?Math.ceil(r()*4):0;
+        var l=Math.min(4,Math.max(a,b)+(a&&b&&Math.max(a,b)<4?1:0));
+        if(w>48&&d>3)l=0;
+        html+='<i'+((w>=50&&l>0)?' class="pulse"':'')+' style="background:'+pal[l]+(l>=3?';box-shadow:0 0 6px '+pal[l]:'')+'"></i>';
+      }
+    }
+    return html;
+  }
+  var langs=[['SWIFT',74,'#ff5d4d'],['JUPYTER',11,'#f9a03c'],['PYTHON',7,'#4d8dff'],['JAVA',5,'#c58a3a'],['TS',2,'#5dd6ff']];
+  function bars(){
+    return langs.map(function(l){
+      var lit=Math.max(1,Math.round(l[1]/100*40)), b='<div class="pctb"><div class="nm">'+l[0]+'</div><div class="bar">';
+      for(var s=0;s<40;s++)b+='<i style="background:'+(s<lit?l[2]:'#15181f')+(s<lit?';box-shadow:0 0 5px '+l[2]:'')+'"></i>';
+      return b+'</div><div>'+l[1]+'%</div></div>';
+    }).join('');
+  }
+  function board(withVisitors){
+    var visitors=withVisitors?'<div class="vis"><div class="v"><u>000</u>658</div><div class="l">VISITORS</div><div style="font-size:9px;margin-top:3px;color:#4dff91">&#9650; AS OF OCT 25</div></div>':'';
+    return '<div class="board">'+
+      '<div class="top"><b>ALEX McGREEVY // COMBINED</b><span><span class="live">&#9679;</span> UPDATED DAILY &middot; 2 ACCOUNTS</span></div>'+
+      '<div class="sec">// THIS YEAR</div><div class="kpis">'+
+        '<div class="kpi"><div class="v" style="color:#4dff91">1,093</div><div class="l">CONTRIBUTIONS</div><div class="s"><span style="color:#4dff91">482 PERSONAL</span> &middot; <span style="color:#5db6ff">611 WORK</span></div></div>'+
+        '<div class="kpi"><div class="v pulse" style="color:#ff5d8f">014</div><div class="l">DAY STREAK</div><div class="s">&#128293; ACTIVE TODAY</div></div>'+
+        '<div class="kpi"><div class="v" style="color:#5db6ff">031</div><div class="l">BEST STREAK</div><div class="s">MAR 2025</div></div>'+visitors+
+      '</div>'+
+      '<div class="sec">// ALL TIME</div><div class="kpis">'+
+        '<div class="kpi"><div class="v" style="color:#ffd24d">2,847</div><div class="l">COMMITS</div><div class="s"><span style="color:#4dff91">1,310 P</span> &middot; <span style="color:#5db6ff">1,537 W</span></div></div>'+
+        '<div class="kpi"><div class="v" style="color:#c084fc">143</div><div class="l">PULL REQUESTS</div><div class="s"><span style="color:#4dff91">31 P</span> &middot; <span style="color:#5db6ff">112 W</span></div></div>'+
+        '<div class="kpi"><div class="v" style="color:#5dd6ff">96</div><div class="l">CODE REVIEWS</div><div class="s"><span style="color:#4dff91">4 P</span> &middot; <span style="color:#5db6ff">92 W</span></div></div>'+
+        '<div class="kpi"><div class="v" style="color:#fb923c">5</div><div class="l">STARS EARNED</div><div class="s">PERSONAL</div></div>'+
+      '</div>'+
+      '<div class="sec">// LANGUAGES</div><div style="margin-bottom:22px">'+bars()+'</div>'+
+      '<div class="sec">// LAST 12 MONTHS</div><div class="g">'+dots(41)+'</div>'+
+      '<div class="leg">LESS <i style="background:#12161c"></i><i style="background:#1e7a4a"></i><i style="background:#37c46b"></i><i style="background:#ffd24d"></i><i style="background:#ff5d8f"></i> MORE</div>'+
+      '<div class="foot"><span>WORK ACTIVITY: PRIVATE REPOS, COUNTS ONLY</span><span>github.com/AlexanderMcGreevy</span></div>'+
+    '</div>';
+  }
+  document.getElementById('b1').innerHTML=board(false);
+  document.getElementById('b2').innerHTML=board(true);
+})();
+</script>
