@@ -113,7 +113,9 @@ def test_narrow_viewbox_and_safe_content(stats):
     _, _, width, height = (float(v) for v in root.get("viewBox").split())
     assert width == 390 == float(root.get("width")) and height > 0
     assert render.NARROW_WIDTH == 390
-    assert "ALEX McGREEVY // COMBINED" in text_contents(root)
+    header = ("ALEX McGREEVY // COMBINED" if stats.work_available
+              else "ALEX McGREEVY // PERSONAL")
+    assert header in text_contents(root)
     assert "WORK ACTIVITY: PRIVATE REPOS, COUNTS ONLY" in text_contents(root)
 
 
@@ -124,6 +126,24 @@ def test_wide_contains_headline_numbers():
                    "ALEX McGREEVY // COMBINED",
                    "WORK ACTIVITY: PRIVATE REPOS, COUNTS ONLY"):
         assert needle in text
+
+
+def test_combined_header_is_exact_wide_and_narrow():
+    for svg in (render_wide(base_stats()), narrow(base_stats())):
+        root = parse(svg)
+        assert "ALEX McGREEVY // COMBINED" in text_contents(root)
+        assert "PERSONAL" not in "".join(
+            t for t in text_contents(root) if t.startswith("ALEX"))
+        assert root.find(f"{NS}title").text == "ALEX McGREEVY // COMBINED"
+
+
+def test_personal_only_header_never_says_combined():
+    stats = personal_only_stats()
+    for svg in (render_wide(stats), narrow(stats)):
+        root = parse(svg)
+        assert "ALEX McGREEVY // PERSONAL" in text_contents(root)
+        assert "COMBINED" not in all_text(root)
+        assert root.find(f"{NS}title").text == "ALEX McGREEVY // PERSONAL"
 
 
 def test_wide_dot_count_matches_grid():

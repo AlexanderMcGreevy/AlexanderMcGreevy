@@ -20,6 +20,7 @@ from .models import BoardStats, Split
 VISITORS_ID = "visitors"
 
 HEADER = "ALEX McGREEVY // COMBINED"
+HEADER_PERSONAL = "ALEX McGREEVY // PERSONAL"
 FOOTER = "WORK ACTIVITY: PRIVATE REPOS, COUNTS ONLY"
 PROFILE = "github.com/AlexanderMcGreevy"
 PERSONAL_ONLY = "PERSONAL ONLY"
@@ -186,8 +187,14 @@ def status_label(work_available: bool) -> str:
     return "UPDATED DAILY · " + ("2 ACCOUNTS" if work_available else PERSONAL_ONLY)
 
 
-def title(left: float, baseline: float) -> str:
-    return text(left, baseline, HEADER, size=TITLE_SIZE, spacing=TITLE_SPACING, font_weight=700)
+def headline(work_available: bool) -> str:
+    """Never present personal-only numbers as combined."""
+    return HEADER if work_available else HEADER_PERSONAL
+
+
+def title(left: float, baseline: float, work_available: bool) -> str:
+    return text(left, baseline, headline(work_available), size=TITLE_SIZE,
+                spacing=TITLE_SPACING, font_weight=700)
 
 
 def status(start: float, baseline: float, work_available: bool) -> str:
@@ -201,7 +208,7 @@ def status(start: float, baseline: float, work_available: bool) -> str:
 def header(left: float, right: float, baseline: float, work_available: bool) -> str:
     """Title and status on one line, status right-aligned."""
     start = right - text_width(status_label(work_available), STATUS_SIZE, STATUS_SPACING)
-    return title(left, baseline) + status(start, baseline, work_available)
+    return title(left, baseline, work_available) + status(start, baseline, work_available)
 
 
 def footer(left: float, right: float, baseline: float, size: float = FOOTER_SIZE,
@@ -540,7 +547,7 @@ def document(width: float, height: float, body: str, s: BoardStats) -> str:
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{_num(width)}" height="{_num(height)}" '
         f'viewBox="0 0 {_num(width)} {_num(height)}" role="img" '
         f'aria-labelledby="title desc" font-family="{escape(FONT, {chr(34): "&quot;"})}">'
-        f'<title id="title">{escape(HEADER)}</title>'
+        f'<title id="title">{escape(headline(s.work_available))}</title>'
         f'<desc id="desc">{escape(description(s))}</desc>'
         f"{defs()}{frame(width, height)}{body}</svg>\n"
     )
@@ -643,8 +650,9 @@ def layout_narrow(stats: BoardStats) -> Layout:
 
     y = FRAME_W + NARROW_PAD_Y  # top of content
     base = y + 13
-    items.append(_text_item("header", left, base, HEADER, TITLE_SIZE, TITLE_SPACING,
-                            title(left, base)))
+    items.append(_text_item("header", left, base, headline(stats.work_available),
+                            TITLE_SIZE, TITLE_SPACING,
+                            title(left, base, stats.work_available)))
     base += 20
     items.append(_text_item("header", left + STATUS_LIGHT, base,
                             status_label(stats.work_available), STATUS_SIZE, STATUS_SPACING,
