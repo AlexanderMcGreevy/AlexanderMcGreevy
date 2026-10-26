@@ -5,6 +5,7 @@ from datetime import date
 
 import pytest
 
+from scoreboard import render
 from scoreboard.models import AllTime, Split
 from scoreboard.render import DOT_RAMP, VISITORS_ID, fmt, render_wide
 from scoreboard.sample import sample_board_data
@@ -37,6 +38,58 @@ def classes(el: ET.Element) -> list[str]:
     return (el.get("class") or "").split()
 
 
+# Both layouts, looked up lazily so a missing renderer fails its own tests only.
+BOARDS = {"wide": ("render_wide", 760, 40), "narrow": ("render_narrow", 390, 24)}
+
+
+@pytest.fixture(params=list(BOARDS))
+def board(request):
+    """(render function, viewBox width, LEDs per language bar)."""
+    name, width, leds = BOARDS[request.param]
+    return getattr(render, name), width, leds
+
+
+def narrow(stats) -> str:
+    return render.render_narrow(stats)
+
+
+def text_contents(root: ET.Element) -> list[str]:
+    return ["".join(t.itertext()) for t in root.iter(f"{NS}text")]
+
+
+def big_stats():
+    return base_stats(
+        year_total=123456, year_personal=61728, year_work=61728,
+        current_streak=1234, best_streak=1234, best_streak_window_only=True,
+        visitors=12345678, visitors_as_of=date(2026, 10, 25),
+        all_time=AllTime(Split(1234567, 617283, 617284), Split(123456, 61728, 61728),
+                         Split(123456, 61728, 61728)),
+        stars=123456,
+    )
+
+
+def personal_only_stats():
+    split = Split(1310, 1310, None)
+    return base_stats(
+        work_available=False, year_work=None, year_total=482, year_personal=482,
+        all_time_work_available=False,
+        all_time=AllTime(split, Split(31, 31, None), Split(4, 4, None)),
+    )
+
+
+def assert_safe(svg: str) -> None:
+    root = parse(svg)
+    assert root.tag == f"{NS}svg"
+    banned = {"script", "image", "foreignObject", "a", "use", "iframe"}
+    for el in root.iter():
+        assert el.tag.removeprefix(NS) not in banned
+        for attr in el.attrib:
+            assert not attr.endswith("href")
+    assert svg.replace("http://www.w3.org/2000/svg", "").count("http") == 0
+    assert "url(" not in svg.replace("url(#", "")  # only local fragment refs
+    assert "@import" not in svg and "@font-face" not in svg
+
+
 def test_fmt():
     assert fmt(0) == "0"
     assert fmt(999) == "999"
@@ -46,18 +99,22 @@ def test_fmt():
 
 def test_wide_is_valid_svg_with_safe_content():
     svg = render_wide(base_stats())
-    root = parse(svg)
-    assert root.tag == f"{NS}svg"
-    _, _, width, height = (float(v) for v in root.get("viewBox").split())
+    assert_safe(svg)
+    _, _, width, height = (float(v) for v in parse(svg).get("viewBox").split())
     assert width == 760 and height > 0
-    banned = {"script", "image", "foreignObject", "a", "use", "iframe"}
-    for el in root.iter():
-        assert el.tag.removeprefix(NS) not in banned
-        for attr in el.attrib:
-            assert not attr.endswith("href")
-    assert svg.replace("http://www.w3.org/2000/svg", "").count("http") == 0
-    assert "url(" not in svg.replace("url(#", "")  # only local fragment refs
-    assert "@import" not in svg and "@font-face" not in svg
+
+
+@pytest.mark.parametrize("stats", [base_stats(), personal_only_stats(), big_stats(),
+                                   base_stats(visitors=None, visitors_as_of=None)])
+def test_narrow_viewbox_and_safe_content(stats):
+    svg = narrow(stats)
+    assert_safe(svg)
+    root = parse(svg)
+    _, _, width, height = (float(v) for v in root.get("viewBox").split())
+    assert width == 390 == float(root.get("width")) and height > 0
+    assert render.NARROW_WIDTH == 390
+    assert "ALEX McGREEVY // COMBINED" in text_contents(root)
+    assert "WORK ACTIVITY: PRIVATE REPOS, COUNTS ONLY" in text_contents(root)
 
 
 def test_wide_contains_headline_numbers():
@@ -83,22 +140,100 @@ def test_wide_dot_count_matches_grid():
     assert Counter(c.get("fill") for c in dots) == Counter(DOT_RAMP[lvl] for lvl in cells)
 
 
-def test_wide_dots_stay_inside_viewbox():
-    root = parse(render_wide(base_stats()))
+@pytest.mark.parametrize("stats", [
+    base_stats(),
+    base_stats(weeks=[[(w + d) % 5 for d in range(7)] for w in range(52)]
+               + [[1, 4, None, None, None, None, None]]),
+])
+def test_narrow_contains_every_dot(stats):
+    wide_dots = [c for c in parse(render_wide(stats)).iter(f"{NS}circle") if "d" in classes(c)]
+    root = parse(narrow(stats))
+    dots = [c for c in root.iter(f"{NS}circle") if "d" in classes(c)]
+    cells = [lvl for col in stats.weeks for lvl in col if lvl is not None]
+    assert len(dots) == len(wide_dots) == len(cells)
+    assert Counter(c.get("fill") for c in dots) == Counter(c.get("fill") for c in wide_dots)
+    # two stacked half-year grids, older half first (above), each in date order
+    older, recent = group(root, "dots-older"), group(root, "dots-recent")
+    split = (len(stats.weeks) + 1) // 2
+    assert 26 <= split <= 28
+    for g, weeks in ((older, stats.weeks[:split]), (recent, stats.weeks[split:])):
+        got = sorted((c for c in g.iter(f"{NS}circle")),
+                     key=lambda c: (float(c.get("cx")), float(c.get("cy"))))
+        assert [c.get("fill") for c in got] == [
+            DOT_RAMP[lvl] for col in weeks for lvl in col if lvl is not None]
+    max_older = max(float(c.get("cy")) for c in older.iter(f"{NS}circle"))
+    min_recent = min(float(c.get("cy")) for c in recent.iter(f"{NS}circle"))
+    assert max_older < min_recent
+    xs = sorted({float(c.get("cx")) for c in older.iter(f"{NS}circle")})
+    assert all(11 <= b - a <= 13 for a, b in zip(xs, xs[1:]))  # dot pitch about 12
+
+
+def test_dots_stay_inside_viewbox(board):
+    render_fn, width, _ = board
+    root = parse(render_fn(base_stats()))
     for c in root.iter(f"{NS}circle"):
         assert 0 < float(c.get("cx")) - float(c.get("r"))
-        assert float(c.get("cx")) + float(c.get("r")) < 760
+        assert float(c.get("cx")) + float(c.get("r")) < width
 
 
-def test_wide_recent_active_dots_pulse():
+def test_recent_active_dots_pulse(board):
+    render_fn, _, _ = board
     weeks = [[0] * 7 for _ in range(52)] + [[3, 2, None, None, None, None, None]]
-    root = parse(render_wide(base_stats(weeks=weeks)))
+    root = parse(render_fn(base_stats(weeks=weeks)))
     pulsing = [c for c in root.iter(f"{NS}circle") if "d" in classes(c) and "pulse" in classes(c)]
     assert len(pulsing) == 2
+    assert {c.get("fill") for c in pulsing} == {DOT_RAMP[3], DOT_RAMP[2]}
 
 
-def test_wide_animations_are_css_only():
-    svg = render_wide(base_stats())
+def test_narrow_pulse_uses_absolute_columns():
+    # the recent half starts at column 27, so its pulse cells must be offset
+    weeks = [[0] * 7 for _ in range(53)]
+    weeks[0] = [4] * 7  # old activity never pulses
+    weeks[51] = [0, 0, 0, 0, 0, 1, 2]
+    weeks[52] = [3, 4, 1, None, None, None, None]
+    root = parse(narrow(base_stats(weeks=weeks)))
+    for gid, n in (("dots-older", 0), ("dots-recent", 5)):
+        g = group(root, gid)
+        assert sum("pulse" in classes(c) for c in g.iter(f"{NS}circle")) == n
+
+
+def test_narrow_drops_weekday_labels():
+    texts = text_contents(parse(narrow(base_stats())))
+    assert not {"MON", "WED", "FRI"} & set(texts)
+    assert "LESS" in texts and "MORE" in texts
+
+
+@pytest.mark.parametrize("stats", [
+    base_stats(year_total=1093, year_personal=482, year_work=611),
+    personal_only_stats(),
+    big_stats(),
+    base_stats(visitors=None, visitors_as_of=None),
+    base_stats(all_time_work_available=False,
+               all_time=AllTime(Split(10, 10, None), Split(2, 2, None), Split(1, 1, None))),
+    base_stats(languages=[]),
+])
+def test_narrow_same_text_content(stats):
+    wide = Counter(text_contents(parse(render_wide(stats))))
+    for day in ("MON", "WED", "FRI"):  # weekday labels are dropped by design
+        del wide[day]
+    got = Counter(text_contents(parse(narrow(stats))))
+    assert wide - got == Counter()  # every string, as many times as wide has it
+    assert (sum("PERSONAL ONLY" in t for t in wide.elements())
+            == sum("PERSONAL ONLY" in t for t in got.elements()))
+
+
+def test_narrow_kpis_two_per_row():
+    root = parse(narrow(base_stats(visitors=658, visitors_as_of=date(2026, 10, 25))))
+    for gid, n in (("this-year", 4), ("all-time", 4)):
+        boxes = [g for g in group(root, gid).iter(f"{NS}g") if "kpi" in classes(g)]
+        assert len(boxes) == n
+        rows = Counter(g.get("transform").split(",")[1] for g in boxes)
+        assert sorted(rows.values()) == [2, 2]
+
+
+def test_animations_are_css_only(board):
+    render_fn, _, _ = board
+    svg = render_fn(base_stats())
     root = parse(svg)
     style = "".join(s.text or "" for s in root.iter(f"{NS}style"))
     assert "@keyframes" in style
@@ -106,27 +241,23 @@ def test_wide_animations_are_css_only():
     assert any("live" in classes(el) for el in root.iter())
 
 
-def test_wide_visitors_group():
+def test_visitors_group(board):
+    render_fn, _, _ = board
     stats = base_stats(visitors=658, visitors_as_of=date(2026, 10, 25))
-    root = parse(render_wide(stats))
+    root = parse(render_fn(stats))
     g = group(root, VISITORS_ID)
     assert g is not None
     text = all_text(g)
     assert "658" in text and "AS OF" in text and "OCT 25" in text
 
-    root = parse(render_wide(replace(stats, visitors=None, visitors_as_of=None)))
+    root = parse(render_fn(replace(stats, visitors=None, visitors_as_of=None)))
     assert group(root, VISITORS_ID) is None
     assert "VISITORS" not in all_text(root)
 
 
-def test_wide_personal_only_labels():
-    split = Split(1310, 1310, None)
-    stats = base_stats(
-        work_available=False, year_work=None, year_total=482, year_personal=482,
-        all_time_work_available=False,
-        all_time=AllTime(split, Split(31, 31, None), Split(4, 4, None)),
-    )
-    root = parse(render_wide(stats))
+def test_personal_only_labels(board):
+    render_fn, _, _ = board
+    root = parse(render_fn(personal_only_stats()))
     year = all_text(group(root, "this-year"))
     assert "PERSONAL ONLY" in year
     assert "WORK" not in year
@@ -195,10 +326,31 @@ def test_wide_language_bars_have_40_leds_lit_by_percent():
     assert "74%" in text and "SWIFT" in text and "<1%" in text
 
 
+def test_narrow_language_bars_have_24_leds():
+    langs = [("Swift", 74), ("Python", 7), ("Go", 0), ("TypeScript", 100)]
+    root = parse(narrow(base_stats(languages=langs)))
+    leds = [r for r in group(root, "languages").iter(f"{NS}rect") if "led" in classes(r)]
+    assert len(leds) == 4 * 24
+    lit = [r for r in leds if "on" in classes(r)]
+    # 74% of 24 = 17.76 -> 18; 7% -> 1.68 -> 2; 0% -> 1; 100% -> 24
+    assert len(lit) == 18 + 2 + 1 + 24
+    assert max(float(r.get("x")) + float(r.get("width")) for r in leds) < 390
+    text = all_text(group(root, "languages"))
+    assert "74%" in text and "SWIFT" in text and "<1%" in text
+
+
 def test_wide_large_numbers_fit():
+    assert_large_numbers_fit(render_wide)
+
+
+def test_narrow_large_numbers_fit():
+    assert_large_numbers_fit(narrow)
+
+
+def assert_large_numbers_fit(render_fn):
     stats = base_stats(all_time=AllTime(Split(12345, 5000, 7345), Split(1, 1, 0),
                                         Split(1, 1, 0)))
-    root = parse(render_wide(stats))
+    root = parse(render_fn(stats))
     found = False
     for g in root.iter(f"{NS}g"):
         if "kpi" not in classes(g):
@@ -211,24 +363,44 @@ def test_wide_large_numbers_fit():
             assert len(content) * 0.6 * size <= box_w, content
             if content == "12,345":
                 found = True
+                # unsqueezed and inside the box padding
+                assert t.get("textLength") is None
+                assert float(t.get("x")) + render.text_width(content, size, 0.06) <= box_w
     assert found
 
 
-def test_wide_rows_fit_inside_board():
-    stats = base_stats(
-        year_total=123456, year_personal=61728, year_work=61728,
-        current_streak=1234, best_streak=1234, best_streak_window_only=True,
-        visitors=12345678, visitors_as_of=date(2026, 10, 25),
-        all_time=AllTime(Split(1234567, 617283, 617284), Split(123456, 61728, 61728),
-                         Split(123456, 61728, 61728)),
-        stars=123456,
-    )
-    root = parse(render_wide(stats))
+def test_rows_fit_inside_board(board):
+    render_fn, width, _ = board
+    root = parse(render_fn(big_stats()))
     for g in root.iter(f"{NS}g"):
         if "kpi" in classes(g):
             x = float(g.get("transform").split("(")[1].split(",")[0])
             w = float(next(r for r in g if r.tag == f"{NS}rect").get("width"))
-            assert x >= 30 and x + w <= 730
+            margin = {760: 30, 390: 16}[width]  # bezel plus some padding
+            assert x >= margin and x + w <= width - margin
+            for t in g.iter(f"{NS}text"):  # text never spills out of its box
+                content = "".join(t.itertext())
+                tw = float(t.get("textLength") or render.text_width(
+                    content, float(t.get("font-size")),
+                    float(t.get("letter-spacing") or 0) / float(t.get("font-size"))))
+                assert float(t.get("x")) + tw <= w
+
+
+@pytest.mark.parametrize("stats", [base_stats(), big_stats(), personal_only_stats(),
+                                   base_stats(languages=[("Jupyter Notebook", 100)] * 5)])
+def test_narrow_nothing_wider_than_viewbox(stats):
+    layout = render.layout_narrow(stats)
+    assert layout.width == render.NARROW_WIDTH == 390
+    kinds = {item.kind for item in layout.items}
+    assert {"header", "kpi", "languages", "months", "dots", "legend", "footer"} <= kinds
+    for item in layout.items:
+        assert item.w > 0, item
+        assert 6 <= item.x and item.x + item.w <= render.NARROW_WIDTH - 6, item
+        assert 6 <= item.y and item.y + item.h <= layout.height - 6, item
+    dots = [i for i in layout.items if i.kind == "dots"]
+    assert len(dots) == 2 and dots[0].y + dots[0].h < dots[1].y
+    # and the SVG agrees with the layout
+    assert narrow(stats) == render.render_layout(layout, stats)
 
 
 def test_wide_no_languages_renders_empty_panel():
@@ -250,8 +422,28 @@ def test_wide_month_labels_duplicates_and_collisions():
     assert xs[-1] + 3 * 0.6 * 9 * 1.2 <= 760 - 30
 
 
-def test_wide_escapes_text():
-    root = parse(render_wide(base_stats(languages=[("C<&>", 50)])))
+def test_narrow_month_labels_split_without_overlap():
+    labels = [(0, "OCT"), (4, "NOV"), (9, "DEC"), (10, "JAN"), (30, "MAY"), (52, "OCT")]
+    root = parse(narrow(base_stats(month_labels=labels)))
+    months = [t for t in root.iter(f"{NS}text") if "m" in classes(t)]
+    rows: dict[float, list[ET.Element]] = {}
+    for t in months:
+        rows.setdefault(float(t.get("y")), []).append(t)
+    assert len(rows) == 2
+    top, bottom = (rows[y] for y in sorted(rows))
+    assert ["".join(t.itertext()) for t in top] == ["OCT", "NOV", "DEC"]  # JAN collides
+    assert ["".join(t.itertext()) for t in bottom] == ["MAY", "OCT"]
+    for row in (top, bottom):
+        xs = [float(t.get("x")) for t in row]
+        assert xs == sorted(xs)
+        for a, b in zip(xs, xs[1:]):
+            assert b - a >= 3 * 0.6 * 9 * 1.08
+        assert xs[-1] + 3 * 0.6 * 9 * 1.08 <= 390 - 6
+
+
+def test_escapes_text(board):
+    render_fn, _, _ = board
+    root = parse(render_fn(base_stats(languages=[("C<&>", 50)])))
     assert "C<&>" in all_text(group(root, "languages"))
 
 
@@ -262,12 +454,14 @@ def test_sample_data_is_fake_and_deterministic():
     assert a.work is not None and a.work.login.startswith("sample")
 
 
-def test_sample_cli_writes_wide_preview(tmp_path):
+def test_sample_cli_writes_wide_and_narrow_previews(tmp_path):
     from scoreboard.__main__ import main
 
     assert main(["--sample", str(tmp_path / "build")]) == 0
-    svg = (tmp_path / "build" / "preview-wide.svg").read_text(encoding="utf-8")
-    assert parse(svg).tag == f"{NS}svg"
+    for name, width in (("preview-wide.svg", "760"), ("preview-narrow.svg", "390")):
+        svg = (tmp_path / "build" / name).read_text(encoding="utf-8")
+        assert parse(svg).tag == f"{NS}svg"
+        assert parse(svg).get("viewBox").split()[2] == width
 
 
 @pytest.mark.parametrize("argv", [[], ["--bogus"]])

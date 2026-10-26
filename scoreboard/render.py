@@ -68,6 +68,17 @@ WIDE_LEDS = 40
 WIDE_DOW_W = 30  # weekday label column, left of the grid
 WIDE_PITCH, WIDE_DOT_R = 12.5, 4.6
 
+# --- narrow (phone) layout ---------------------------------------------------
+NARROW_WIDTH = 390
+NARROW_PAD_X, NARROW_PAD_Y = 14, 20
+NARROW_LEFT = FRAME_W + NARROW_PAD_X  # 20
+NARROW_RIGHT = NARROW_WIDTH - NARROW_LEFT  # 370
+NARROW_LEDS = 24
+NARROW_NAME_W = 80
+NARROW_KPI_COLS, NARROW_KPI_GAP = 2, 10
+NARROW_PITCH, NARROW_DOT_R = 12, 4.4
+NARROW_SECTION_GAP = 22
+
 Seg = tuple[str, "str | None"]  # (text, fill); None inherits the element fill
 
 
@@ -165,24 +176,45 @@ def frame(width: float, height: float) -> str:
             f'stroke-width="{FRAME_W}"/>')
 
 
+TITLE_SIZE, TITLE_SPACING = 15, 0.2
+STATUS_SIZE, STATUS_SPACING = 12, 0.14
+STATUS_LIGHT = 14  # live light plus its gap, left of the status text
+FOOTER_SIZE, FOOTER_SPACING = 10, 0.08
+
+
+def status_label(work_available: bool) -> str:
+    return "UPDATED DAILY · " + ("2 ACCOUNTS" if work_available else PERSONAL_ONLY)
+
+
+def title(left: float, baseline: float) -> str:
+    return text(left, baseline, HEADER, size=TITLE_SIZE, spacing=TITLE_SPACING, font_weight=700)
+
+
+def status(start: float, baseline: float, work_available: bool) -> str:
+    """The live light and status text; `start` is where the text begins."""
+    return (f'<circle class="live" cx="{_num(start - 10)}" cy="{_num(baseline - 4)}" r="4" '
+            f'fill="{GREEN}" filter="url(#glow-sm)"/>'
+            + text(start, baseline, status_label(work_available), size=STATUS_SIZE,
+                   spacing=STATUS_SPACING))
+
+
 def header(left: float, right: float, baseline: float, work_available: bool) -> str:
-    status = "UPDATED DAILY · " + ("2 ACCOUNTS" if work_available else PERSONAL_ONLY)
-    size, spacing = 12, 0.14
-    start = right - text_width(status, size, spacing)
-    return (
-        text(left, baseline, HEADER, size=15, spacing=0.2, font_weight=700)
-        + f'<circle class="live" cx="{_num(start - 10)}" cy="{_num(baseline - 4)}" r="4" '
-          f'fill="{GREEN}" filter="url(#glow-sm)"/>'
-        + text(start, baseline, status, size=size, spacing=spacing)
-    )
+    """Title and status on one line, status right-aligned."""
+    start = right - text_width(status_label(work_available), STATUS_SIZE, STATUS_SPACING)
+    return title(left, baseline) + status(start, baseline, work_available)
 
 
-def footer(left: float, right: float, baseline: float, size: float = 10,
-           show_profile: bool = True) -> str:
-    out = text(left, baseline, FOOTER, size=size, fill=MUTED, spacing=0.08)
-    if show_profile:
-        out += text(right, baseline, PROFILE, size=size, fill=MUTED, spacing=0.08,
+def footer(left: float, right: float, baseline: float, size: float = FOOTER_SIZE,
+           show_profile: bool = True, profile_baseline: float | None = None) -> str:
+    """Footer note, plus the profile link text right-aligned on the same line or,
+    with `profile_baseline`, left-aligned on a line of its own."""
+    out = text(left, baseline, FOOTER, size=size, fill=MUTED, spacing=FOOTER_SPACING)
+    if show_profile and profile_baseline is None:
+        out += text(right, baseline, PROFILE, size=size, fill=MUTED, spacing=FOOTER_SPACING,
                     text_anchor="end")
+    elif show_profile:
+        out += text(left, profile_baseline, PROFILE, size=size, fill=MUTED,
+                    spacing=FOOTER_SPACING)
     return out
 
 
@@ -226,6 +258,20 @@ def layout_row(kpis: Sequence[Kpi], x: float, width: float,
         placed.append((k, cursor, w))
         cursor += w + gap
     return placed
+
+
+def layout_grid(kpis: Sequence[Kpi], x: float, width: float, cols: int,
+                gap: float = KPI_GAP, row_gap: float = KPI_GAP,
+                h: float = KPI_H) -> list[tuple[Kpi, float, float, float]]:
+    """Equal-width boxes, `cols` per row: (kpi, x, y offset, width)."""
+    w = (width - gap * (cols - 1)) / cols
+    return [(k, x + (i % cols) * (w + gap), (i // cols) * (h + row_gap), w)
+            for i, k in enumerate(kpis)]
+
+
+def grid_height(n: int, cols: int, row_gap: float = KPI_GAP, h: float = KPI_H) -> float:
+    rows = -(-n // cols)
+    return rows * h + max(0, rows - 1) * row_gap
 
 
 def draw_kpi(k: Kpi, x: float, y: float, w: float, h: float = KPI_H) -> str:
@@ -362,6 +408,19 @@ def led_bar_width(leds: int) -> float:
     return leds * (LED_W + LED_GAP) - LED_GAP
 
 
+def _pct_label(pct: int) -> str:
+    return f"{pct}%" if pct > 0 else "<1%"
+
+
+def language_rows_width(langs: Sequence[tuple[str, int]], leds: int,
+                        name_w: float = LANG_NAME_W) -> float:
+    """Estimated width of what `language_rows` draws."""
+    if not langs:
+        return text_width("NO LANGUAGE DATA YET", LANG_SIZE, 0.06)
+    pct_w = max(text_width(_pct_label(pct), LANG_SIZE, 0.06) for _, pct in langs)
+    return name_w + 10 + led_bar_width(leds) + 10 + pct_w
+
+
 def language_rows(langs: Sequence[tuple[str, int]], x: float, top: float,
                   leds: int, name_w: float = LANG_NAME_W) -> tuple[str, float]:
     """Rows of NAME [LEDs] NN%. Returns (svg, height used)."""
@@ -378,8 +437,7 @@ def language_rows(langs: Sequence[tuple[str, int]], x: float, top: float,
         out.append(text(x, y + 9, language_name(name, max_chars), size=LANG_SIZE,
                         spacing=0.06))
         out.append(led_bar(bar_x, y, pct, color, leds))
-        out.append(text(pct_x, y + 9, f"{pct}%" if pct > 0 else "<1%", size=LANG_SIZE,
-                        spacing=0.06))
+        out.append(text(pct_x, y + 9, _pct_label(pct), size=LANG_SIZE, spacing=0.06))
     return "".join(out), len(langs) * LANG_ROW - (LANG_ROW - LED_H)
 
 
@@ -430,6 +488,10 @@ def month_positions(labels: Sequence[tuple[int, str]], col_x: Callable[[int], fl
     return placed
 
 
+def grid_width(cols: int, pitch: float, r: float) -> float:
+    return max(0, cols - 1) * pitch + 2 * r
+
+
 def month_labels(labels: Sequence[tuple[int, str]], col_x: Callable[[int], float],
                  right: float, baseline: float) -> str:
     return "".join(text(x, baseline, name, size=MONTH_SIZE, fill=MUTED, spacing=0.08,
@@ -441,6 +503,11 @@ def weekday_labels(x: float, y: float, pitch: float, r: float) -> str:
     return "".join(text(x, y + r + d * pitch + DOW_SIZE * 0.35, name, size=DOW_SIZE,
                         fill=MUTED)
                    for d, name in ((1, "MON"), (3, "WED"), (5, "FRI")))
+
+
+def legend_width() -> float:
+    return (text_width("LESS", LEGEND_SIZE, 0.08) + 5 + len(DOT_RAMP) * 16
+            + text_width("MORE", LEGEND_SIZE, 0.08))
 
 
 def legend(x: float, baseline: float) -> str:
@@ -528,3 +595,153 @@ def render_wide(stats: BoardStats) -> str:
     parts.append(footer(left, right, y))
     height = y + 3 + WIDE_PAD_Y + FRAME_W
     return document(WIDE_WIDTH, height, "".join(parts), stats)
+
+
+# --- narrow (phone) layout ---------------------------------------------------
+
+@dataclass(frozen=True)
+class Placed:
+    """One drawn element with its estimated bounding box, for layout checks."""
+    kind: str
+    x: float
+    y: float
+    w: float
+    h: float
+    svg: str
+    section: str | None = None  # id of the <g> it is grouped under
+
+
+@dataclass(frozen=True)
+class Layout:
+    width: float
+    height: float
+    items: tuple[Placed, ...]
+
+
+def _text_item(kind: str, x: float, baseline: float, s: str, size: float, spacing: float,
+               svg: str, section: str | None = None, lead: float = 0) -> Placed:
+    """A text line's box: cap height above the baseline, descenders below.
+    `lead` is extra width drawn left of `x` (the live light)."""
+    return Placed(kind, x - lead, baseline - size * 0.8, lead + text_width(s, size, spacing),
+                  size, svg, section)
+
+
+def _split_weeks(weeks: Sequence[Sequence[int | None]]) -> list[tuple[str, int, int]]:
+    """The two half-year grids, older first: (group id, first column, end column)."""
+    mid = (len(weeks) + 1) // 2
+    halves = [("dots-older", 0, mid), ("dots-recent", mid, len(weeks))]
+    return [h for h in halves if h[2] > h[1]]
+
+
+def layout_narrow(stats: BoardStats) -> Layout:
+    """Place every element of the 390-wide board. `render_narrow` draws exactly
+    these items; tests inspect their boxes."""
+    left, right = NARROW_LEFT, NARROW_RIGHT
+    width = right - left
+    titles = section_titles(stats)
+    items: list[Placed] = []
+
+    y = FRAME_W + NARROW_PAD_Y  # top of content
+    base = y + 13
+    items.append(_text_item("header", left, base, HEADER, TITLE_SIZE, TITLE_SPACING,
+                            title(left, base)))
+    base += 20
+    items.append(_text_item("header", left + STATUS_LIGHT, base,
+                            status_label(stats.work_available), STATUS_SIZE, STATUS_SPACING,
+                            status(left + STATUS_LIGHT, base, stats.work_available),
+                            lead=STATUS_LIGHT))
+    y = base + 12
+    items.append(Placed("rule", left, y, width, 1, rule(left, right, y)))
+    y += 25
+
+    def section(gid: str, label: str, content: Callable[[float], float],
+                after: float = NARROW_SECTION_GAP) -> None:
+        nonlocal y
+        items.append(_text_item("label", left, y, label, SECTION_SIZE, 0.22,
+                                section_label(left, y, label), gid))
+        y += 12 + content(y + 12) + after
+
+    def kpi_grid(gid: str, kpis: Sequence[Kpi]) -> Callable[[float], float]:
+        def place(top: float) -> float:
+            cells = layout_grid(kpis, left, width, NARROW_KPI_COLS, NARROW_KPI_GAP,
+                                NARROW_KPI_GAP)
+            for k, bx, dy, bw in cells:
+                items.append(Placed("kpi", bx, top + dy, bw, KPI_H,
+                                    draw_kpi(k, bx, top + dy, bw), gid))
+            return grid_height(len(kpis), NARROW_KPI_COLS, NARROW_KPI_GAP)
+        return place
+
+    def languages(top: float) -> float:
+        svg, used = language_rows(stats.languages, left, top, NARROW_LEDS, NARROW_NAME_W)
+        w = language_rows_width(stats.languages, NARROW_LEDS, NARROW_NAME_W)
+        items.append(Placed("languages", left, top, w, used, svg, "languages"))
+        return used
+
+    def calendar(top: float) -> float:
+        pulse = recent_cells(stats.weeks)
+        grid_h = 6 * NARROW_PITCH + 2 * NARROW_DOT_R
+        t = top
+        for gid, first, end in _split_weeks(stats.weeks):
+            half = stats.weeks[first:end]
+            grid_y = t + 14
+
+            def col_x(col: int) -> float:
+                return left + col * NARROW_PITCH
+
+            labels = [(c - first, name) for c, name in stats.month_labels if first <= c < end]
+            spots = month_positions(labels, col_x, right)
+            if spots:
+                x0 = spots[0][0]
+                x1 = max(x + text_width(n, MONTH_SIZE, 0.08) for x, n in spots)
+                items.append(Placed("months", x0, t + 8 - MONTH_SIZE * 0.8, x1 - x0, MONTH_SIZE,
+                                    month_labels(labels, col_x, right, t + 8), "calendar"))
+            dots = dot_grid(half, left, grid_y, NARROW_PITCH, NARROW_DOT_R,
+                            first_col=first, pulse=pulse)
+            items.append(Placed("dots", left, grid_y,
+                                grid_width(len(half), NARROW_PITCH, NARROW_DOT_R), grid_h,
+                                f'<g id="{gid}">{dots}</g>', "calendar"))
+            t = grid_y + grid_h + 10
+        t -= 10
+        base = t + 12 + 9
+        items.append(Placed("legend", left, base - 9, legend_width(), 11,
+                            legend(left, base), "calendar"))
+        return t + 12 + 11 - top
+
+    section("this-year", titles["year"], kpi_grid("this-year", year_kpis(stats)))
+    section("all-time", titles["all_time"], kpi_grid("all-time", all_time_kpis(stats)))
+    section("languages", titles["languages"], languages, NARROW_SECTION_GAP + 4)
+    section("calendar", titles["calendar"], calendar, 16)
+
+    items.append(Placed("rule", left, y, width, 1, rule(left, right, y)))
+    y += 10 + 9
+    profile_base = y + 15
+    svg = footer(left, right, y, profile_baseline=profile_base)
+    w = max(text_width(FOOTER, FOOTER_SIZE, FOOTER_SPACING),
+            text_width(PROFILE, FOOTER_SIZE, FOOTER_SPACING))
+    items.append(Placed("footer", left, y - FOOTER_SIZE * 0.8, w,
+                        profile_base - y + FOOTER_SIZE, svg))
+    height = profile_base + 3 + NARROW_PAD_Y + FRAME_W
+    return Layout(NARROW_WIDTH, height, tuple(items))
+
+
+def render_layout(layout: Layout, stats: BoardStats) -> str:
+    """Draw placed items in order, wrapping runs of one section in its <g>."""
+    parts: list[str] = []
+    current: str | None = None
+    for item in layout.items:
+        if item.section != current:
+            if current is not None:
+                parts.append("</g>")
+            if item.section is not None:
+                parts.append(f'<g id="{item.section}">')
+            current = item.section
+        parts.append(item.svg)
+    if current is not None:
+        parts.append("</g>")
+    return document(layout.width, layout.height, "".join(parts), stats)
+
+
+def render_narrow(stats: BoardStats) -> str:
+    """The same board reflowed for phones at 390 wide: KPI boxes two per row,
+    the 12 months as two stacked half-year dot grids, 24-LED language bars."""
+    return render_layout(layout_narrow(stats), stats)

@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
-from .render import render_wide
+from .render import render_narrow, render_wide
 from .sample import sample_board_data
 from .stats import compute_stats
 
@@ -22,9 +22,12 @@ from .stats import compute_stats
 def write_previews(out_dir: Path) -> list[Path]:
     stats = compute_stats(sample_board_data())
     out_dir.mkdir(parents=True, exist_ok=True)
-    wide = out_dir / "preview-wide.svg"
-    wide.write_text(render_wide(stats), encoding="utf-8")
-    return [wide]
+    written = []
+    for name, render in (("preview-wide.svg", render_wide), ("preview-narrow.svg", render_narrow)):
+        path = out_dir / name
+        path.write_text(render(stats), encoding="utf-8")
+        written.append(path)
+    return written
 
 
 def main(argv: Sequence[str] | None = None) -> int:
