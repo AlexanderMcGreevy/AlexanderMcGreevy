@@ -72,11 +72,10 @@ Work account @ https://github.com/AlexanderMcGreevy1    <----- Currently my more
 
 ## 📈 GitHub Stats  
 
-![Alexander's GitHub Stats](https://github-readme-stats.vercel.app/api?username=AlexanderMcGreevy&show_icons=true&theme=default&hide_title=true)
-
-![GitHub Streak](https://streak-stats.demolab.com?user=AlexanderMcGreevy&theme=default)
-
-![Top Languages](https://github-readme-stats.vercel.app/api/top-langs/?username=AlexanderMcGreevy&layout=compact)
+<picture>
+  <source media="(max-width: 600px)" srcset="assets/scoreboard-narrow.svg">
+  <img src="assets/scoreboard.svg" alt="Combined GitHub stats for Alexander McGreevy across personal and work accounts">
+</picture>
 
 ![](https://komarev.com/ghpvc/?username=alexandermcgreevy)
 
