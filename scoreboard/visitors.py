@@ -6,7 +6,9 @@ is accepted.
 """
 
 import json
+import os
 import re
+import tempfile
 import urllib.request
 from collections.abc import Callable
 from datetime import date
@@ -48,13 +50,35 @@ def load_state(path: Path) -> tuple[int | None, date | None]:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
         count = data["visitors"]
         as_of = date.fromisoformat(data["as_of"])
-        if isinstance(count, bool) or not isinstance(count, int):
+        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
             return None, None
         return count, as_of
     except Exception:
         return None, None
 
 
+def atomic_write_text(path: Path, content: str) -> None:
+    """Write via a temp file in the same directory, then rename over `path`.
+
+    A crash or full disk leaves either the old file or the new one, never a
+    half-written file. Missing parent directories are created.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
+            handle.write(content)
+        os.chmod(tmp, 0o644)  # mkstemp makes it owner-only
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def save_state(path: Path, count: int, as_of: date) -> None:
     payload = {"visitors": int(count), "as_of": as_of.isoformat()}
-    Path(path).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    atomic_write_text(Path(path), json.dumps(payload, indent=2) + "\n")

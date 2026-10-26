@@ -464,8 +464,8 @@ def test_sample_cli_writes_wide_and_narrow_previews(tmp_path):
         assert parse(svg).get("viewBox").split()[2] == width
 
 
-@pytest.mark.parametrize("argv", [[], ["--bogus"]])
-def test_cli_without_sample_is_an_error(argv):
+@pytest.mark.parametrize("argv", [["--bogus"], ["--sample"]])
+def test_cli_rejects_bad_arguments(argv):
     from scoreboard.__main__ import main
 
     with pytest.raises(SystemExit) as exc:
