@@ -118,6 +118,12 @@ def _window_sum(cal: dict[date, int], today: date) -> int:
     return sum(count for day, count in cal.items() if start < day <= today)
 
 
+def _grid_levels(grid: list[list[int | None]]) -> list[list[int | None]]:
+    """Replace each day's count with its 0-4 dot level; None (future) stays None."""
+    levels = iter(dot_levels([c for col in grid for c in col if c is not None]))
+    return [[None if c is None else next(levels) for c in col] for col in grid]
+
+
 def compute_stats(data: BoardData) -> BoardStats:
     """Combine personal and (optional) work data into the board's numbers."""
     today = data.today
@@ -135,7 +141,8 @@ def compute_stats(data: BoardData) -> BoardStats:
 
     merged = merge_calendars(personal.calendar, work.calendar if work else {})
     best, best_end = best_streak(merged)
-    weeks, labels = last_12_months_grid(merged, today)
+    counts, labels = last_12_months_grid(merged, today)
+    weeks = _grid_levels(counts)
 
     if data.languages_scope == "combined":
         languages = language_shares(personal.languages, work.languages if work else None)

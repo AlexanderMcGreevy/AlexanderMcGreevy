@@ -258,6 +258,17 @@ def test_compute_stats_stars_come_from_personal_only():
     assert compute_stats(board(account("p", {}), w)).stars is None
 
 
+def test_compute_stats_weeks_are_dot_levels():
+    # raw counts 1, 2, 7, 40 in the window -> quartile levels; future days stay None
+    cal = {date(2026, 10, 18): 1, date(2026, 10, 19): 2, date(2026, 10, 20): 7,
+           date(2026, 10, 21): 40}
+    stats = compute_stats(board(account("p", cal), None))
+    cells = [v for col in stats.weeks for v in col]
+    assert all(v is None or 0 <= v <= 4 for v in cells)
+    assert stats.weeks[-2][:4] == [1, 2, 3, 4]
+    assert stats.weeks[-1][0] == 0 and stats.weeks[-1][1:] == [None] * 6
+
+
 def test_compute_stats_empty_calendars_and_languages():
     stats = compute_stats(board(account("p", {}), None))
     assert stats.year_total == 0
