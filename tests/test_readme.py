@@ -51,6 +51,10 @@ def test_workflow_has_required_pieces():
         "actions/checkout@v4",
         "actions/setup-python@v5",
         "chore: update scoreboard",
+        "timeout-minutes: 10",
+        "concurrency:",
+        "group: scoreboard",
+        "cancel-in-progress: false",
     ):
         assert needle in text, needle
 
