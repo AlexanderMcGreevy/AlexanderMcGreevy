@@ -274,3 +274,17 @@ def test_compute_stats_empty_calendars_and_languages():
     assert stats.year_total == 0
     assert stats.best_streak == 0 and stats.best_streak_end is None
     assert stats.languages == []
+
+
+def test_window_only_best_streak_ignores_days_outside_last_year():
+    old = days(TODAY - timedelta(days=3 * 365), 10)  # 10-day run three years ago
+    recent_start = TODAY - timedelta(days=40)
+    recent = days(recent_start, 4)  # 4-day run last month
+    p = account("p", {**old, **recent})
+    complete = compute_stats(board(p, account("w", {})))
+    assert complete.best_streak_window_only is False
+    assert complete.best_streak == 10
+    window = compute_stats(board(p, account("w", {}, complete=False)))
+    assert window.best_streak_window_only is True
+    assert window.best_streak == 4
+    assert window.best_streak_end == recent_start + timedelta(days=3)

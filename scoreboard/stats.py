@@ -140,7 +140,15 @@ def compute_stats(data: BoardData) -> BoardStats:
         return Split(mine + (theirs or 0), mine, theirs)
 
     merged = merge_calendars(personal.calendar, work.calendar if work else {})
-    best, best_end = best_streak(merged)
+    window_only = (not personal.history_complete) or (
+        work is not None and not work.history_complete
+    )
+    if window_only:  # the label says 12-MONTH, so count only that window
+        start = _one_year_ago(today)
+        streak_days = {d: c for d, c in merged.items() if start < d <= today}
+    else:
+        streak_days = merged
+    best, best_end = best_streak(streak_days)
     counts, labels = last_12_months_grid(merged, today)
     weeks = _grid_levels(counts)
 
@@ -156,8 +164,7 @@ def compute_stats(data: BoardData) -> BoardStats:
         current_streak=current_streak(merged, today),
         best_streak=best,
         best_streak_end=best_end,
-        best_streak_window_only=(not personal.history_complete)
-        or (work is not None and not work.history_complete),
+        best_streak_window_only=window_only,
         all_time=AllTime(
             commits=split("commits"),
             pull_requests=split("pull_requests"),
