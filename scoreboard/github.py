@@ -268,6 +268,7 @@ def _repo_nodes(gql: GraphQL, query: str) -> Iterator[dict]:
     """Yield each repository node across all pages of the viewer's repos."""
     cursor: str | None = None
     while True:
+        previous = cursor
         viewer = gql(query, {"first": PAGE_SIZE, "after": cursor}).get("viewer")
         try:
             repos = viewer["repositories"]
@@ -287,6 +288,8 @@ def _repo_nodes(gql: GraphQL, query: str) -> Iterator[dict]:
             return
         if not cursor:
             raise PersistentError("malformed response: missing page cursor")
+        if cursor == previous:
+            raise PersistentError("malformed response: page cursor did not advance")
 
 
 def fetch_stars(gql: GraphQL) -> int:
@@ -308,7 +311,7 @@ def fetch_languages(gql: GraphQL) -> dict[str, int]:
     languages: dict[str, int] = {}
     for node in _repo_nodes(gql, LANGUAGES_QUERY):
         try:
-            edges = node["languages"]["edges"]
+            edges = (node["languages"] or {}).get("edges") or []
             parsed = [(str(e["node"]["name"]), int(e["size"])) for e in edges]
         except (KeyError, TypeError, ValueError):
             raise PersistentError("malformed response: languages") from None

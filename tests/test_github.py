@@ -394,3 +394,28 @@ def test_fetch_languages_sums_bytes_and_drops_repo_names():
 def test_malformed_repo_payload_raises_persistent(fetch, bad):
     with pytest.raises(PersistentError):
         fetch(PagedGql([bad]))
+
+
+def test_null_languages_repo_is_skipped():
+    normal = {"languages": {"edges": [{"size": 7, "node": {"name": "Python"}}]}}
+    gql = PagedGql([repos_page([{"languages": None}, {"languages": {"edges": None}}, normal])])
+    assert fetch_languages(gql) == {"Python": 7}
+
+
+@pytest.mark.parametrize(
+    "fetch, node", [(fetch_stars, {"stargazerCount": 1}), (fetch_languages, {"languages": {"edges": []}})]
+)
+def test_repeated_cursor_raises_instead_of_looping(fetch, node):
+    class SameCursor:
+        calls = 0
+
+        def __call__(self, query, variables):
+            self.calls += 1
+            if self.calls > 5:
+                raise AssertionError("pager looped")
+            return repos_page([node], True, "same")
+
+    gql = SameCursor()
+    with pytest.raises(PersistentError):
+        fetch(gql)
+    assert gql.calls <= 3
