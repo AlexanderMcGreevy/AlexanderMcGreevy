@@ -11,7 +11,7 @@ import json
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from datetime import date
 from typing import TypeVar
 
@@ -48,8 +48,56 @@ query($from: DateTime!, $to: DateTime!) {
 }
 """
 
+STARS_QUERY = """
+query($first: Int!, $after: String) {
+  viewer {
+    repositories(
+      first: $first, after: $after, ownerAffiliations: OWNER, privacy: PUBLIC
+    ) {
+      nodes {
+        stargazerCount
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+}
+"""
+
+# Language names and byte counts only: no repository field other than
+# `languages` is requested.
+LANGUAGES_QUERY = """
+query($first: Int!, $after: String) {
+  viewer {
+    repositories(
+      first: $first, after: $after, ownerAffiliations: OWNER, isFork: false
+    ) {
+      nodes {
+        languages(first: 20, orderBy: {field: SIZE, direction: DESC}) {
+          edges {
+            size
+            node {
+              name
+            }
+          }
+        }
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+}
+"""
+
+PAGE_SIZE = 100
+
 _PERSISTENT_GRAPHQL = {"FORBIDDEN", "INSUFFICIENT_SCOPES"}
 _TRANSIENT_GRAPHQL = {"RATE_LIMITED"}
+_TRANSIENT_HTTP = {408, 429}
 
 
 def classify(status: int | None, errors: list[dict]) -> type[Exception] | None:
@@ -59,19 +107,19 @@ def classify(status: int | None, errors: list[dict]) -> type[Exception] | None:
     """
     if status is None:
         return TransientError
-    if status == 429 or status >= 500:
+    if status in _TRANSIENT_HTTP or status >= 500:
         return TransientError
     if status >= 400:
         return PersistentError
-    types = {e.get("type") for e in errors or []}
+    if not errors:
+        return None
+    types = {e.get("type") for e in errors}
     if types & _TRANSIENT_GRAPHQL:
         return TransientError
     if types & _PERSISTENT_GRAPHQL:
         return PersistentError
-    if types:
-        # Unrecognised GraphQL errors (e.g. a bad query) will not fix themselves.
-        return PersistentError
-    return None
+    # Typeless or unrecognised errors look like blips, not a lost token.
+    return TransientError
 
 
 def with_retries(
@@ -141,7 +189,32 @@ def _window(gql: GraphQL, start: date, end: date) -> dict:
         "from": f"{start.isoformat()}T00:00:00Z",
         "to": f"{end.isoformat()}T23:59:59Z",
     }
-    return gql(CONTRIBUTIONS_QUERY, variables)["viewer"]
+    viewer = gql(CONTRIBUTIONS_QUERY, variables).get("viewer")
+    if not isinstance(viewer, dict):
+        raise PersistentError("malformed response: no viewer")
+    return viewer
+
+
+def _parse_window(viewer: dict) -> tuple[dict[str, int], dict[date, int]]:
+    """Validate one window's payload and return (totals, calendar).
+
+    Raises PersistentError on a malformed payload without having touched any
+    caller state.
+    """
+    try:
+        collection = viewer["contributionsCollection"]
+        totals = {
+            "commits": int(collection["totalCommitContributions"]),
+            "pull_requests": int(collection["totalPullRequestContributions"]),
+            "reviews": int(collection["totalPullRequestReviewContributions"]),
+        }
+        calendar: dict[date, int] = {}
+        for week in collection["contributionCalendar"]["weeks"]:
+            for day in week["contributionDays"]:
+                calendar[date.fromisoformat(day["date"])] = int(day["contributionCount"])
+    except (KeyError, TypeError, ValueError, AttributeError):
+        raise PersistentError("malformed response: contributions") from None
+    return totals, calendar
 
 
 def fetch_contributions(gql: GraphQL, today: date) -> AccountData:
@@ -154,19 +227,21 @@ def fetch_contributions(gql: GraphQL, today: date) -> AccountData:
     totals = {"commits": 0, "pull_requests": 0, "reviews": 0}
 
     def absorb(viewer: dict) -> None:
-        collection = viewer["contributionsCollection"]
-        totals["commits"] += collection["totalCommitContributions"]
-        totals["pull_requests"] += collection["totalPullRequestContributions"]
-        totals["reviews"] += collection["totalPullRequestReviewContributions"]
-        for week in collection["contributionCalendar"]["weeks"]:
-            for day in week["contributionDays"]:
-                calendar[date.fromisoformat(day["date"])] = day["contributionCount"]
+        window_totals, window_calendar = _parse_window(viewer)
+        for key, value in window_totals.items():
+            totals[key] += value
+        for day, count in window_calendar.items():
+            # A date can appear in two windows; never let a smaller value win.
+            calendar[day] = max(calendar.get(day, 0), count)
 
     # The current year goes first: its response also tells us when the account
     # was created, which bounds every other window.
     current = _window(gql, date(today.year, 1, 1), today)
-    login = current["login"]
-    created = date.fromisoformat(current["createdAt"][:10])
+    try:
+        login = str(current["login"])
+        created = date.fromisoformat(current["createdAt"][:10])
+    except (KeyError, TypeError, ValueError):
+        raise PersistentError("malformed response: account") from None
     absorb(current)
 
     history_complete = True
@@ -187,3 +262,56 @@ def fetch_contributions(gql: GraphQL, today: date) -> AccountData:
         reviews=totals["reviews"],
         history_complete=history_complete,
     )
+
+
+def _repo_nodes(gql: GraphQL, query: str) -> Iterator[dict]:
+    """Yield each repository node across all pages of the viewer's repos."""
+    cursor: str | None = None
+    while True:
+        viewer = gql(query, {"first": PAGE_SIZE, "after": cursor}).get("viewer")
+        try:
+            repos = viewer["repositories"]
+            nodes = repos["nodes"]
+            page = repos["pageInfo"]
+            has_next = bool(page["hasNextPage"])
+            cursor = page.get("endCursor")
+            if not isinstance(nodes, list):
+                raise TypeError
+        except (KeyError, TypeError, AttributeError):
+            raise PersistentError("malformed response: repositories") from None
+        for node in nodes:
+            if not isinstance(node, dict):
+                raise PersistentError("malformed response: repositories")
+            yield node
+        if not has_next:
+            return
+        if not cursor:
+            raise PersistentError("malformed response: missing page cursor")
+
+
+def fetch_stars(gql: GraphQL) -> int:
+    """Total stargazers across the viewer's owned, public repositories."""
+    total = 0
+    for node in _repo_nodes(gql, STARS_QUERY):
+        try:
+            total += int(node["stargazerCount"])
+        except (KeyError, TypeError, ValueError):
+            raise PersistentError("malformed response: stars") from None
+    return total
+
+
+def fetch_languages(gql: GraphQL) -> dict[str, int]:
+    """Bytes per language across the viewer's owned, non-fork repositories.
+
+    Repository names are never requested, so none can be kept.
+    """
+    languages: dict[str, int] = {}
+    for node in _repo_nodes(gql, LANGUAGES_QUERY):
+        try:
+            edges = node["languages"]["edges"]
+            parsed = [(str(e["node"]["name"]), int(e["size"])) for e in edges]
+        except (KeyError, TypeError, ValueError):
+            raise PersistentError("malformed response: languages") from None
+        for name, size in parsed:
+            languages[name] = languages.get(name, 0) + size
+    return languages

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
+from .models import AllTime, BoardData, BoardStats, Split
+
 _MONTHS = ("JAN", "FEB", "MAR", "APR", "MAY", "JUN",
            "JUL", "AUG", "SEP", "OCT", "NOV", "DEC")
 _WEEKS = 53
@@ -79,3 +81,88 @@ def last_12_months_grid(
                 labels.append((w, _MONTHS[day.month - 1]))
         weeks.append(column)
     return weeks, labels
+
+
+def language_shares(
+    personal: dict[str, int] | None,
+    work: dict[str, int] | None,
+    top: int = 5,
+) -> list[tuple[str, int]]:
+    """Merge two byte maps and return the top languages as integer percents.
+
+    Percents are of the *total* merged bytes (rounded half up), so the shown
+    entries need not sum to 100. Ties break alphabetically.
+    """
+    merged: dict[str, int] = {}
+    for side in (personal, work):
+        for name, size in (side or {}).items():
+            if size > 0:
+                merged[name] = merged.get(name, 0) + size
+    total = sum(merged.values())
+    if total == 0:
+        return []
+    ranked = sorted(merged.items(), key=lambda item: (-item[1], item[0]))[:top]
+    return [(name, (size * 100 * 2 + total) // (2 * total)) for name, size in ranked]
+
+
+def _one_year_ago(today: date) -> date:
+    try:
+        return today.replace(year=today.year - 1)
+    except ValueError:  # Feb 29
+        return today.replace(year=today.year - 1, day=28)
+
+
+def _window_sum(cal: dict[date, int], today: date) -> int:
+    """Sum of counts for days in (one year ago, today]."""
+    start = _one_year_ago(today)
+    return sum(count for day, count in cal.items() if start < day <= today)
+
+
+def compute_stats(data: BoardData) -> BoardStats:
+    """Combine personal and (optional) work data into the board's numbers."""
+    today = data.today
+    personal, work = data.personal, data.work
+    work_available = work is not None
+    all_time_work = work is not None and work.history_complete
+
+    year_personal = _window_sum(personal.calendar, today)
+    year_work = _window_sum(work.calendar, today) if work is not None else None
+
+    def split(attr: str) -> Split:
+        mine = getattr(personal, attr)
+        theirs = getattr(work, attr) if all_time_work else None
+        return Split(mine + (theirs or 0), mine, theirs)
+
+    merged = merge_calendars(personal.calendar, work.calendar if work else {})
+    best, best_end = best_streak(merged)
+    weeks, labels = last_12_months_grid(merged, today)
+
+    if data.languages_scope == "combined":
+        languages = language_shares(personal.languages, work.languages if work else None)
+    else:
+        languages = language_shares(personal.languages, None)
+
+    return BoardStats(
+        year_total=year_personal + (year_work or 0),
+        year_personal=year_personal,
+        year_work=year_work,
+        current_streak=current_streak(merged, today),
+        best_streak=best,
+        best_streak_end=best_end,
+        best_streak_window_only=(not personal.history_complete)
+        or (work is not None and not work.history_complete),
+        all_time=AllTime(
+            commits=split("commits"),
+            pull_requests=split("pull_requests"),
+            reviews=split("reviews"),
+        ),
+        stars=personal.stars,
+        languages=languages,
+        weeks=weeks,
+        month_labels=labels,
+        work_available=work_available,
+        all_time_work_available=all_time_work,
+        languages_scope=data.languages_scope,
+        visitors=data.visitors,
+        visitors_as_of=data.visitors_as_of,
+    )

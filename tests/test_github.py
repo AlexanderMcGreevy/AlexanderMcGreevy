@@ -3,7 +3,13 @@ from datetime import date
 import pytest
 
 from scoreboard.errors import PersistentError, TransientError
-from scoreboard.github import classify, fetch_contributions, with_retries
+from scoreboard.github import (
+    classify,
+    fetch_contributions,
+    fetch_languages,
+    fetch_stars,
+    with_retries,
+)
 
 TODAY = date(2026, 10, 25)
 SECRET_REPO = "secret-org/secret-repo"
@@ -204,3 +210,187 @@ def test_classifies_rate_limited_graphql_as_transient():
 
 def test_classifies_success_as_none():
     assert classify(200, []) is None
+
+
+# --- Task 3: carry-over fixes (classify, malformed payloads, calendar merge) ---
+
+
+def test_classifies_typeless_graphql_error_as_transient():
+    assert classify(200, [{"message": "something blipped"}]) is TransientError
+
+
+def test_classifies_unknown_graphql_type_as_transient():
+    assert classify(200, [{"type": "SOMETHING_NEW"}]) is TransientError
+
+
+def test_known_persistent_type_wins_over_typeless_error():
+    assert classify(200, [{"message": "blip"}, {"type": "FORBIDDEN"}]) is PersistentError
+
+
+@pytest.mark.parametrize("status", [408, 429])
+def test_classifies_408_and_429_as_transient(status):
+    assert classify(status, []) is TransientError
+
+
+@pytest.mark.parametrize("status", [400, 404, 422])
+def test_other_4xx_stay_persistent(status):
+    assert classify(status, []) is PersistentError
+
+
+def _viewer(**overrides):
+    base = payload(days=[("2026-01-01", 1)])["viewer"]
+    base.update(overrides)
+    return {"viewer": base}
+
+
+def _without_calendar_keys():
+    p = _viewer()
+    del p["viewer"]["contributionsCollection"]["contributionCalendar"]["weeks"]
+    return p
+
+
+def _without_collection():
+    p = _viewer()
+    del p["viewer"]["contributionsCollection"]
+    return p
+
+
+def _without_count_key():
+    p = _viewer()
+    del p["viewer"]["contributionsCollection"]["totalCommitContributions"]
+    return p
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"viewer": None},
+        {},
+        {"viewer": {"login": "alex"}},
+        _without_collection(),
+        _without_calendar_keys(),
+        _without_count_key(),
+        _viewer(createdAt="not-a-date"),
+    ],
+)
+def test_malformed_current_year_payload_raises_persistent(bad):
+    gql = FakeGql({2026: bad})
+    with pytest.raises(PersistentError):
+        fetch_contributions(gql, TODAY)
+
+
+def test_malformed_previous_year_payload_raises_persistent():
+    gql = FakeGql({2024: payload(), 2025: {"viewer": None}, 2026: payload()})
+    with pytest.raises(PersistentError):
+        fetch_contributions(gql, TODAY)
+
+
+def test_malformed_older_year_marks_history_incomplete_without_partial_totals():
+    broken = _without_calendar_keys()
+    broken["viewer"]["contributionsCollection"]["totalCommitContributions"] = 999
+    gql = FakeGql({2024: broken, 2025: payload(commits=10), 2026: payload(commits=20)})
+    account = fetch_contributions(gql, TODAY)
+    assert account.history_complete is False
+    assert account.commits == 30
+
+
+def test_overlapping_windows_keep_max_count_per_date():
+    # 2025-12-31 appears in two windows; the larger count wins in either order.
+    gql = FakeGql(
+        {
+            2024: payload(),
+            2025: payload(days=[("2025-12-31", 9)]),
+            2026: payload(days=[("2025-12-31", 2), ("2026-01-01", 1)]),
+        }
+    )
+    assert fetch_contributions(gql, TODAY).calendar[date(2025, 12, 31)] == 9
+    gql = FakeGql(
+        {
+            2024: payload(),
+            2025: payload(days=[("2025-12-31", 2)]),
+            2026: payload(days=[("2025-12-31", 9)]),
+        }
+    )
+    assert fetch_contributions(gql, TODAY).calendar[date(2025, 12, 31)] == 9
+
+
+# --- Task 3: stars and languages ---
+
+
+def repos_page(nodes, has_next=False, cursor=None):
+    return {
+        "viewer": {
+            "repositories": {
+                "nodes": nodes,
+                "pageInfo": {"hasNextPage": has_next, "endCursor": cursor},
+            }
+        }
+    }
+
+
+class PagedGql:
+    def __init__(self, pages):
+        self.pages = list(pages)
+        self.calls = []
+
+    def __call__(self, query, variables):
+        self.calls.append((query, variables))
+        return self.pages.pop(0)
+
+
+def test_fetch_stars_paginates():
+    gql = PagedGql(
+        [
+            repos_page([{"stargazerCount": 3}, {"stargazerCount": 4}], True, "c1"),
+            repos_page([{"stargazerCount": 10}]),
+        ]
+    )
+    assert fetch_stars(gql) == 17
+    assert [v.get("after") for _, v in gql.calls] == [None, "c1"]
+    assert all(v["first"] == 100 for _, v in gql.calls)
+    assert "OWNER" in gql.calls[0][0] and "PUBLIC" in gql.calls[0][0]
+
+
+def test_fetch_stars_no_repos_is_zero():
+    assert fetch_stars(PagedGql([repos_page([])])) == 0
+
+
+def test_fetch_languages_sums_bytes_and_drops_repo_names():
+    def repo(name, langs):
+        return {
+            "name": name,
+            "nameWithOwner": f"org/{name}",
+            "languages": {"edges": [{"size": s, "node": {"name": n}} for n, s in langs]},
+        }
+
+    gql = PagedGql(
+        [
+            repos_page(
+                [repo("secret-repo", [("Python", 100), ("Go", 50)])], True, "c1"
+            ),
+            repos_page([repo("other-secret", [("Python", 25)]), repo("empty", [])]),
+        ]
+    )
+    result = fetch_languages(gql)
+    assert result == {"Python": 125, "Go": 50}
+    assert "secret" not in repr(result)
+    query = gql.calls[0][0]
+    assert "isFork: false" in query and "OWNER" in query
+    assert "nameWithOwner" not in query
+    assert "url" not in query.lower()
+
+
+@pytest.mark.parametrize("fetch", [fetch_stars, fetch_languages])
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"viewer": None},
+        {"viewer": {"repositories": None}},
+        {"viewer": {"repositories": {"nodes": None, "pageInfo": {}}}},
+        repos_page([{"unexpected": 1}], False),
+        repos_page([{"stargazerCount": 1}], True, None),  # next page but no cursor
+    ],
+)
+def test_malformed_repo_payload_raises_persistent(fetch, bad):
+    with pytest.raises(PersistentError):
+        fetch(PagedGql([bad]))

@@ -3,7 +3,8 @@
 Usage: PERSONAL_GH_TOKEN=... WORK_GH_TOKEN=... python -m scoreboard.check_token
 
 Prints only: which token is set, OK/FAIL with the error class name, the number
-of calendar days, and all-time counts. No repo names, no token values.
+of calendar days, all-time counts, the star total and the number of languages.
+No repo names, no token values.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ import os
 import sys
 from datetime import date
 
-from .github import fetch_contributions, make_transport
+from .github import fetch_contributions, fetch_languages, fetch_stars, make_transport
 
 TOKENS = ("PERSONAL_GH_TOKEN", "WORK_GH_TOKEN")
 
@@ -22,7 +23,8 @@ def check(env_name: str, token: str | None) -> bool:
     if not token:
         return False
     try:
-        account = fetch_contributions(make_transport(token), date.today())
+        gql = make_transport(token)
+        account = fetch_contributions(gql, date.today())
     except Exception as exc:  # report the class only; messages stay out of output
         print(f"  contributions: FAIL ({type(exc).__name__})")
         return False
@@ -33,6 +35,16 @@ def check(env_name: str, token: str | None) -> bool:
     print(f"  reviews: {account.reviews}")
     if not account.history_complete:
         print("  history: INCOMPLETE (older years failed)")
+    # Languages and stars are informational: the work token may be unable to
+    # read private-repo languages, which is exactly what this reveals.
+    for label, fetch, show in (
+        ("stars", fetch_stars, lambda value: value),
+        ("languages", fetch_languages, len),
+    ):
+        try:
+            print(f"  {label}: OK ({show(fetch(gql))})")
+        except Exception as exc:
+            print(f"  {label}: FAIL ({type(exc).__name__})")
     return True
 
 
