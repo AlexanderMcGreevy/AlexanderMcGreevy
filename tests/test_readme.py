@@ -45,7 +45,7 @@ def test_workflow_has_required_pieces():
         "if: always()",
         "id: gen",
         "python -m scoreboard",
-        "steps.gen.outcome == 'failure'",
+        "if: always() && steps.gen.outcome == 'failure'",
         "PERSONAL_GH_TOKEN",
         "WORK_GH_TOKEN",
         "actions/checkout@v4",
@@ -59,3 +59,10 @@ def test_workflow_does_not_print_account_data():
     text = WORKFLOW.read_text(encoding="utf-8")
     assert "state.json" not in text
     assert "cat assets" not in text
+
+
+def test_commit_step_guards_missing_assets_dir():
+    text = WORKFLOW.read_text(encoding="utf-8")
+    guard = '[ -d assets ] || { echo "No assets directory; nothing to commit."; exit 0; }'
+    assert guard in text
+    assert text.index(guard) < text.index("git add assets/")

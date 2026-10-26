@@ -29,6 +29,7 @@ jobs:
       - name: Commit scoreboard
         if: always()
         run: |
+          [ -d assets ] || { echo "No assets directory; nothing to commit."; exit 0; }
           git add assets/
           if git diff --cached --quiet; then
             echo "No scoreboard changes to commit."
@@ -40,7 +41,7 @@ jobs:
           fi
 
       - name: Fail the job if generation failed
-        if: steps.gen.outcome == 'failure'
+        if: always() && steps.gen.outcome == 'failure'
         run: |
           echo "::error::Scoreboard generation failed. Check the run log annotations to see which account or step failed."
           exit 1
