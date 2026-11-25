@@ -82,7 +82,7 @@ Most of my 2026 work lives in private Waterside Group repos under my work accoun
 - 💼 **[CARDinal](https://github.com/AlexanderMcGreevy/CARDinal)** — swap digital business cards and resumes phone to phone
 - 🎬 **[Moovie](https://github.com/AlexanderMcGreevy/Moovie)** — rank movies against each other and compare lists with friends
 - 🎮 **[Tetris](https://github.com/AlexanderMcGreevy/Tetris)** — the classic, from scratch in Java Swing
-- 🏔️ **[The Climb](https://github.com/AlexanderMcGreevy/portfolio-site)** — my portfolio, a site you scroll up a mountain
+- 🏔️ **[The Climb](https://alexandermcgreevy.github.io/portfolio-site/)** — my portfolio, a site you scroll up a mountain ([code](https://github.com/AlexanderMcGreevy/portfolio-site))
 
 ---
 
@@ -99,5 +99,6 @@ Most of my 2026 work lives in private Waterside Group repos under my work accoun
 
 ## 🌐 Let's Connect  
 
+[![Portfolio](https://img.shields.io/badge/Portfolio-2F5D3A?style=for-the-badge&logo=githubpages&logoColor=white)](https://alexandermcgreevy.github.io/portfolio-site/)
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/alexander-mcgreevy/)
 [![GitHub](https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/AlexanderMcGreevy)
