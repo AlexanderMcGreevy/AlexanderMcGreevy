@@ -10,7 +10,7 @@ Most of my 2026 work lives in private Waterside Group repos under my work accoun
 - 🎓 **CS Student** @ Northeastern University — Concentration in Software Engineering  
 - 💼 **Software Engineering Co-op** @ Waterside Group (Jul – Dec 2026) — three public websites, a reusable CMS package, and features in the internal company portal  
 - 🏦 **Software Engineering Intern** @ The Clearing House (Summer 2025) — rebuilt a payments simulation frontend in React on AWS  
-- 💻 **10x Hackathon Participant(3x winner)** — HackMIT (🏆 3rd place Infosys Carbon-Conscious AI)
+- 💻 **11 hackathons, 3 wins** — including HackUMass XI (🏆 Best Data Protection) and HackMIT 2025 (🏆 3rd place, Infosys Carbon-Conscious AI)
 - 🧠 **Academic Interests:** Algorithms, Software Systems, AI/ML, and Sustainable Computing  
 - 🛠️ **Builder at Heart:** Projects in Full-Stack, iOS (SwiftUI), and Chrome Extensions  
 - 🤺 **Fencer & Coach** — Experienced in strategy, leadership, and mentoring  
